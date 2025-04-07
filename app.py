@@ -2,11 +2,13 @@ from flask import Flask, render_template, request, redirect, send_file, session,
 import pandas as pd
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'default_key')
+app.secret_key = 'simplekey'
+
+STATIC_USERNAME = 'karmoreshrikesh0@gmail.com'
+STATIC_PASSWORD = 'SecAuth01#'
 
 FILE_NAME = 'expenses.xlsx'
 COLUMNS = ['Date', 'Amount', 'Description', 'Category']
@@ -25,31 +27,26 @@ def save_data(df):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form['username'] == os.getenv('USERNAME') and request.form['password'] == os.getenv('PASSWORD'):
-            session['logged_in'] = True
-            return redirect('/')
+        if request.form['username'] == STATIC_USERNAME and request.form['password'] == STATIC_PASSWORD:
+            session['user'] = request.form['username']
+            return redirect(url_for('index'))
         else:
-            return render_template('login.html', error="Invalid credentials")
+            return render_template('login.html', error='Invalid credentials')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.clear()
-    return redirect('/login')
+    session.pop('user', None)
+    return redirect(url_for('login'))
 
-def login_required(f):
-    from functools import wraps
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect('/login')
-        return f(*args, **kwargs)
-    return decorated
+@app.before_request
+def require_login():
+    if request.endpoint not in ('login', 'static') and 'user' not in session:
+        return redirect(url_for('login'))
 
 # ---------------- Routes ----------------
 
 @app.route('/', methods=['GET', 'POST'])
-@login_required
 def index():
     df = load_data()
     if request.method == 'POST':
@@ -75,7 +72,6 @@ def index():
     return render_template('index.html', expenses=expenses, total=total)
 
 @app.route('/delete', methods=['POST'])
-@login_required
 def delete():
     df = load_data()
     selected_index = int(request.form['selected_index'])
@@ -85,7 +81,6 @@ def delete():
     return redirect('/')
 
 @app.route('/edit', methods=['GET', 'POST'])
-@login_required
 def edit():
     df = load_data()
     if request.method == 'GET':
@@ -101,12 +96,10 @@ def edit():
         return redirect('/')
 
 @app.route('/export_csv')
-@login_required
 def export_csv():
     return send_file(FILE_NAME, as_attachment=True)
 
 @app.route('/display')
-@login_required
 def display():
     df = load_data()
     df['Month'] = pd.to_datetime(df['Date']).dt.to_period('M')
