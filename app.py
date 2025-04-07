@@ -86,4 +86,4 @@ def display():
     return render_template('display.html', tables=[summary.to_html(classes='table table-bordered', index=False)], titles=summary.columns.values)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
