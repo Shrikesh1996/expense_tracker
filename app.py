@@ -1,10 +1,12 @@
-# app.py
-from flask import Flask, render_template, request, redirect, send_file
+from flask import Flask, render_template, request, redirect, send_file, session, url_for
 import pandas as pd
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'default_key')
 
 FILE_NAME = 'expenses.xlsx'
 COLUMNS = ['Date', 'Amount', 'Description', 'Category']
@@ -19,10 +21,37 @@ def load_data():
 def save_data(df):
     df.to_excel(FILE_NAME, index=False)
 
+# ---------------- Authentication ----------------
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        if request.form['username'] == os.getenv('USERNAME') and request.form['password'] == os.getenv('PASSWORD'):
+            session['logged_in'] = True
+            return redirect('/')
+        else:
+            return render_template('login.html', error="Invalid credentials")
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated
+
+# ---------------- Routes ----------------
+
 @app.route('/', methods=['GET', 'POST'])
+@login_required
 def index():
     df = load_data()
-
     if request.method == 'POST':
         amount = request.form['amount']
         description = request.form['description']
@@ -33,7 +62,6 @@ def index():
         save_data(df)
         return redirect('/')
 
-    # Filtering
     filter_date = request.args.get('date')
     filter_cat = request.args.get('category')
     filtered_df = df
@@ -47,6 +75,7 @@ def index():
     return render_template('index.html', expenses=expenses, total=total)
 
 @app.route('/delete', methods=['POST'])
+@login_required
 def delete():
     df = load_data()
     selected_index = int(request.form['selected_index'])
@@ -56,14 +85,13 @@ def delete():
     return redirect('/')
 
 @app.route('/edit', methods=['GET', 'POST'])
+@login_required
 def edit():
     df = load_data()
-
     if request.method == 'GET':
         idx = int(request.args.get('selected_index'))
         row = df.iloc[idx]
         return render_template('edit.html', index=idx, row=row)
-
     if request.method == 'POST':
         idx = int(request.form['index'])
         df.at[idx, 'Amount'] = request.form['amount']
@@ -73,10 +101,12 @@ def edit():
         return redirect('/')
 
 @app.route('/export_csv')
+@login_required
 def export_csv():
     return send_file(FILE_NAME, as_attachment=True)
 
 @app.route('/display')
+@login_required
 def display():
     df = load_data()
     df['Month'] = pd.to_datetime(df['Date']).dt.to_period('M')
@@ -86,4 +116,4 @@ def display():
     return render_template('display.html', tables=[summary.to_html(classes='table table-bordered', index=False)], titles=summary.columns.values)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=10000)
